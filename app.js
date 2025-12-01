@@ -292,18 +292,54 @@ const LOCAL_MAP = LOCAL_DATA.reduce((m, r) => {
 }, {});
 
 // ==================================================================
-//  RELAY / TIMERS / LIMITS (unchanged behavior)
+//  FIREBASE LOGIC
 // ==================================================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyCPHVRbepbXkTrVVQZJafOqmo6p6LgEwGw",
+  authDomain: "sample-9daef.firebaseapp.com",
+  databaseURL: "https://sample-9daef-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "sample-9daef",
+  storageBucket: "sample-9daef.firebasestorage.app",
+  messagingSenderId: "312603807910",
+  appId: "1:312603807910:web:fbc1a93d9088995967e467"
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// Push checkbox changes to Firebase
 for (let i = 1; i <= 4; i++) {
   const el = document.getElementById(`relay${i}`);
-  if (el) el.addEventListener("change", (e) => toggleRelay(i, e.target.checked));
+  if (el) {
+    el.addEventListener("change", (e) => {
+      set(ref(db, "relays/relay" + i), e.target.checked);
+    });
+  }
 }
+
+// Sync dashboard with Firebase (ESP32 writes back)
+for (let i = 1; i <= 4; i++) {
+  const el = document.getElementById(`relay${i}`);
+  if (el) {
+    onValue(ref(db, "relays/relay" + i), (snapshot) => {
+      const state = snapshot.val();
+      el.checked = !!state;
+      toggleRelay(i, state); // update UI status text
+    });
+  }
+}
+
+// ==================================================================
+//  RELAY / TIMERS / LIMITS
+// ==================================================================
 function toggleRelay(id, state) {
   relayStates[id] = state;
   const statusEl = document.getElementById(`s${id}`);
   if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
   addNotification(`Load ${id} turned ${state ? "ON" : "OFF"}`);
 }
+
 document.querySelectorAll(".preset").forEach((btn) => {
   btn.addEventListener("click", () => {
     const input = document.getElementById("customMin");
