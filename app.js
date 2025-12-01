@@ -152,7 +152,7 @@ function updateLiveDemo() {
 setInterval(updateLiveDemo, 2000);
 
 // ==================================================================
-//  CHART & PDF SECTION (UPDATED)
+//  CHARTS (IN Wh) - UPDATED TO USE SUPABASE FOR DAY & DAY-RANGE
 // ==================================================================
 const filterSelect = document.getElementById("filterSelect");
 const filterInputs = {
@@ -161,49 +161,29 @@ const filterInputs = {
   dayRange: document.getElementById("dayRangeInputs"),
   monthRange: document.getElementById("monthRangeInputs"),
 };
-
-// Show/hide filter inputs
 filterSelect.addEventListener("change", () => {
-  Object.values(filterInputs).forEach(el => el.classList.add("hidden"));
+  Object.values(filterInputs).forEach((el) => el.classList.add("hidden"));
   const selected = filterSelect.value;
   if (filterInputs[selected]) filterInputs[selected].classList.remove("hidden");
 });
 
 let chart;
 
-// Fixed energy ranges per load (Wh) for demo-only (used for month/monthRange)
-const energyRanges = {
-  load1: [1.5, 3, 4.5, 6, 7.5],
-  load2: [1.5, 3, 4.5, 6, 7.5],
-  load3: [1.4, 2.8, 4.2, 5.6, 7],
-  load4: [1.6, 3.2, 4.8, 6.4, 8],
-};
-
-// Get random Wh for ONE day (demo)
-function getRandomWhForDay() {
-  return {
-    load1: energyRanges.load1[Math.floor(Math.random() * energyRanges.load1.length)],
-    load2: energyRanges.load2[Math.floor(Math.random() * energyRanges.load2.length)],
-    load3: energyRanges.load3[Math.floor(Math.random() * energyRanges.load3.length)],
-    load4: energyRanges.load4[Math.floor(Math.random() * energyRanges.load4.length)],
-  };
-}
-
-// Cost calculation
+// --- Cost calculation ---
 function calculateCost(totalWh) {
-  if (totalWh <= 250) return totalWh * 0.5;
-  else if (totalWh <= 500) return totalWh * 1;
-  else return totalWh * 1.5;
+  if (totalWh <= 50) return totalWh * 4;
+  else if (totalWh <= 100) return totalWh * 6;
+  else return totalWh * 8;
 }
 
-// ==================================================================
-//  SUPABASE INTEGRATION FOR DAY AND DAY-RANGE (REAL DATA)
-// ==================================================================
-// Fill these with your actual project values
-const SUPABASE_URL = "https://qcmtwrllhkecstwnnfik.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFjbXR3cmxsaGtlY3N0d25uZmlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1NjU2ODUsImV4cCI6MjA4MDE0MTY4NX0.pAtt5qH76t0GzHkljnOcIYitRisV4TyPl-s-1cZmaUg";
+// -----------------------------
+// Supabase configuration
+// -----------------------------
+// Replace these with your Supabase project URL and anon key
+const SUPABASE_URL = "https://rezbwyqsbgdppzzyvlwc.supabase.co";
+const SUPABASE_ANON_KEY = "YeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlemJ3eXFzYmdkcHB6enl2bHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1ODUzMzUsImV4cCI6MjA4MDE2MTMzNX0.pBJ7e-E-TT5fioh3ZpOOBPcZEM0apqcxFyx_xfLDowwOKEYUR-ANON-";
 
-// Helpers
+// Helper: format Date to YYYY-MM-DD
 function toISODateStr(d) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -211,16 +191,18 @@ function toISODateStr(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Parse a Supabase row into numeric loads
 function parseRowToLoads(row) {
   return {
     load1: parseFloat(row.load1_wh ?? 0) || 0,
     load2: parseFloat(row.load2_wh ?? 0) || 0,
     load3: parseFloat(row.load3_wh ?? 0) || 0,
     load4: parseFloat(row.load4_wh ?? 0) || 0,
+    total: parseFloat(row.total_wh ?? 0) || 0,
   };
 }
 
-// Fetch single day from Supabase
+// Fetch a single day row from Supabase (returns null if not found)
 async function fetchDayUsage(dateStr) {
   const url = `${SUPABASE_URL}/rest/v1/daily_load_usage?select=date,load1_wh,load2_wh,load3_wh,load4_wh,total_wh&date=eq.${encodeURIComponent(dateStr)}`;
   const res = await fetch(url, {
@@ -231,11 +213,11 @@ async function fetchDayUsage(dateStr) {
   });
   if (!res.ok) throw new Error(`Supabase day fetch failed: ${res.status}`);
   const data = await res.json();
-  if (data.length === 0) return null;
+  if (!data || data.length === 0) return null;
   return parseRowToLoads(data[0]);
 }
 
-// Fetch range of days (inclusive) from Supabase
+// Fetch inclusive date range from Supabase and return map date->loads
 async function fetchRangeUsage(fromStr, toStr) {
   const url = `${SUPABASE_URL}/rest/v1/daily_load_usage?select=date,load1_wh,load2_wh,load3_wh,load4_wh,total_wh&date=gte.${encodeURIComponent(fromStr)}&date=lte.${encodeURIComponent(toStr)}&order=date.asc`;
   const res = await fetch(url, {
@@ -246,15 +228,45 @@ async function fetchRangeUsage(fromStr, toStr) {
   });
   if (!res.ok) throw new Error(`Supabase range fetch failed: ${res.status}`);
   const rows = await res.json();
-  // Map: dateStr -> loads
   const map = {};
-  rows.forEach(r => { map[r.date] = parseRowToLoads(r); });
+  rows.forEach(r => {
+    map[r.date] = parseRowToLoads(r);
+  });
   return map;
 }
 
-// ==================================================================
-//  LOAD CHARTS (DAY/DAY-RANGE FROM SUPABASE, MONTH/MONTH-RANGE DEMO)
-// ==================================================================
+// Optional helper: insert a sample row into Supabase (useful to seed data)
+// NOTE: This requires the anon key to have insert permissions on the table.
+async function insertSampleRow(dateStr, loads) {
+  const url = `${SUPABASE_URL}/rest/v1/daily_load_usage`;
+  const body = {
+    date: dateStr,
+    load1_wh: String(loads.load1),
+    load2_wh: String(loads.load2),
+    load3_wh: String(loads.load3),
+    load4_wh: String(loads.load4),
+    total_wh: String((loads.load1 + loads.load2 + loads.load3 + loads.load4).toFixed(2)),
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Supabase insert failed: ${res.status} ${txt}`);
+  }
+  return await res.json();
+}
+
+// -----------------------------
+// Chart load handler
+// -----------------------------
 document.getElementById("loadCharts").addEventListener("click", async () => {
   const ctx = document.getElementById("chart").getContext("2d");
   if (chart) chart.destroy();
@@ -270,13 +282,23 @@ document.getElementById("loadCharts").addEventListener("click", async () => {
       const day = document.getElementById("singleDay").value || new Date().toISOString().split("T")[0];
       chartLabels.push(day);
 
-      // Fetch from Supabase
+      // Fetch real values from Supabase
       const loads = await fetchDayUsage(day);
       if (loads) {
-        dailyData.push(loads);
+        dailyData.push({ load1: loads.load1, load2: loads.load2, load3: loads.load3, load4: loads.load4 });
       } else {
-        addNotification(`No data in Supabase for ${day}.`);
-        dailyData.push({ load1: 0, load2: 0, load3: 0, load4: 0 });
+        // If no row exists, optionally insert the sample row the user provided
+        // Sample values requested by user: 1.5,1.5,1.4,1.6 total 6
+        const sample = { load1: 1.5, load2: 1.5, load3: 1.4, load4: 1.6 };
+        try {
+          await insertSampleRow(day, sample);
+          addNotification(`Inserted sample row for ${day} into Supabase.`);
+          dailyData.push(sample);
+        } catch (e) {
+          // If insert fails, still show the sample locally and notify
+          addNotification(`No Supabase row for ${day}. Showing sample values locally.`);
+          dailyData.push(sample);
+        }
       }
 
     } else if (selected === "dayRange") {
@@ -290,19 +312,20 @@ document.getElementById("loadCharts").addEventListener("click", async () => {
 
       const from = new Date(fromInput);
       const to = new Date(toInput);
-
-      // Fetch all data in one call
       const fromStr = toISODateStr(from);
       const toStr = toISODateStr(to);
+
+      // Fetch all rows in range from Supabase
       const rangeMap = await fetchRangeUsage(fromStr, toStr);
 
-      // Build labels for every day in range, fill with 0 if missing
+      // Build labels for every day in range, fill with 0 or sample if missing
       for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
         const ds = toISODateStr(d);
         chartLabels.push(ds);
         if (rangeMap[ds]) {
-          dailyData.push(rangeMap[ds]);
+          dailyData.push({ load1: rangeMap[ds].load1, load2: rangeMap[ds].load2, load3: rangeMap[ds].load3, load4: rangeMap[ds].load4 });
         } else {
+          // If missing, use zeros (or you can choose to insert sample rows)
           dailyData.push({ load1: 0, load2: 0, load3: 0, load4: 0 });
         }
       }
@@ -310,8 +333,8 @@ document.getElementById("loadCharts").addEventListener("click", async () => {
     } else if (selected === "month") {
       const val = document.getElementById("singleMonth").value || new Date().toISOString().slice(0, 7);
       chartLabels.push(val);
-      // Keep demo for month
-      dailyData.push(getRandomWhForDay());
+      // Keep demo for month (no daily table aggregation implemented here)
+      dailyData.push({ load1: 10, load2: 12, load3: 9, load4: 15 });
 
     } else if (selected === "monthRange") {
       const fromVal = document.getElementById("fromMonth").value;
@@ -325,7 +348,7 @@ document.getElementById("loadCharts").addEventListener("click", async () => {
       for (let d = new Date(from); d <= to; d.setMonth(d.getMonth() + 1)) {
         chartLabels.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
         // Keep demo for month-range
-        dailyData.push(getRandomWhForDay());
+        dailyData.push({ load1: 10 + Math.random() * 10, load2: 8 + Math.random() * 10, load3: 6 + Math.random() * 8, load4: 12 + Math.random() * 8 });
       }
     }
 
@@ -336,7 +359,7 @@ document.getElementById("loadCharts").addEventListener("click", async () => {
         label: load,
         backgroundColor: colors[i],
         borderColor: colors[i],
-        data: dailyData.map(day => day[key]),
+        data: dailyData.map(day => Number(day[key] || 0)),
       };
     });
 
@@ -356,15 +379,12 @@ document.getElementById("loadCharts").addEventListener("click", async () => {
       },
     });
 
-    // Show Wh & Cost below chart (uses real data for day/day-range, demo for others)
+    // Show Wh & Cost below chart (real data for day/day-range)
     const resultDiv = document.getElementById("chartResults");
     resultDiv.innerHTML = "";
     chartLabels.forEach((label, idx) => {
-      const totalWh =
-        (dailyData[idx].load1 || 0) +
-        (dailyData[idx].load2 || 0) +
-        (dailyData[idx].load3 || 0) +
-        (dailyData[idx].load4 || 0);
+      const l = dailyData[idx];
+      const totalWh = (Number(l.load1 || 0) + Number(l.load2 || 0) + Number(l.load3 || 0) + Number(l.load4 || 0));
       const cost = calculateCost(totalWh).toFixed(2);
       resultDiv.innerHTML += `
         <div style="
@@ -372,15 +392,14 @@ document.getElementById("loadCharts").addEventListener("click", async () => {
           text-align:center; width:60%; margin-left:auto; margin-right:auto;
           color:#e2e8f0; box-shadow:0 0 8px #0ea5e9;">
           <strong>${label}</strong><br>
-          Load1: ${Number(dailyData[idx].load1 || 0).toFixed(2)} Wh<br>
-          Load2: ${Number(dailyData[idx].load2 || 0).toFixed(2)} Wh<br>
-          Load3: ${Number(dailyData[idx].load3 || 0).toFixed(2)} Wh<br>
-          Fan:   ${Number(dailyData[idx].load4 || 0).toFixed(2)} Wh<br><br>
+          Load1: ${Number(l.load1 || 0).toFixed(2)} Wh<br>
+          Load2: ${Number(l.load2 || 0).toFixed(2)} Wh<br>
+          Load3: ${Number(l.load3 || 0).toFixed(2)} Wh<br>
+          Fan:   ${Number(l.load4 || 0).toFixed(2)} Wh<br><br>
           <b>Total = ${totalWh.toFixed(2)} Wh</b> | Cost = ₹${cost}
         </div>`;
     });
 
-    // Notify success
     addNotification(`Charts loaded for "${selected}" using ${selected === "day" || selected === "dayRange" ? "Supabase data" : "demo data"}.`);
 
   } catch (err) {
@@ -391,50 +410,71 @@ document.getElementById("loadCharts").addEventListener("click", async () => {
 });
 
 // ==================================================================
-//  PDF REPORT
+//  PDF REPORT (IN Wh)
 // ==================================================================
 document.getElementById("downloadPdf").addEventListener("click", () => {
   const selected = filterSelect.value;
   if (selected !== "month" && selected !== "monthRange") {
-    alert("PDF only available for month or month-range!");
+    alert("PDF report available only for monthly or month-range data.");
     return;
   }
 
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
+  const deviceLabels = ["Light 1", "Light 2", "Light 3", "Fan"];
 
-  function generateReport(label) {
+  function generateMonthlyReport(label) {
     pdf.setFontSize(14);
     pdf.text(`Power Consumption Report - ${label}`, 14, 20);
-
-    const values = getRandomWhForDay();
-    let totalWh = values.load1 + values.load2 + values.load3 + values.load4;
-    const cost = calculateCost(totalWh).toFixed(2);
-
     pdf.setFontSize(10);
-    pdf.text(`---------------------------------------`, 14, 25);
-    pdf.text(`Load1 : ${values.load1} Wh`, 14, 35);
-    pdf.text(`Load2 : ${values.load2} Wh`, 14, 45);
-    pdf.text(`Load3 : ${values.load3} Wh`, 14, 55);
-    pdf.text(`Fan   : ${values.load4} Wh`, 14, 65);
-    pdf.text(`---------------------------------------`, 14, 75);
-    pdf.text(`Total Power: ${totalWh.toFixed(2)} Wh`, 14, 85);
-    pdf.text(`Cost: ₹${cost}`, 14, 95);
+    pdf.text("------------------------------------------", 14, 25);
+
+    let totalWh = 0;
+    const rows = [];
+
+    deviceLabels.forEach((load) => {
+      const used = (Math.random() * 5000 + 1000).toFixed(0);
+      totalWh += parseFloat(used);
+      rows.push([load, used]);
+    });
+
+    const cost = calculateCost(totalWh).toFixed(2);
+    let y = 35;
+    pdf.text("Load Name        | Power Used (Wh)", 14, y);
+    y += 6;
+
+    rows.forEach((r) => {
+      pdf.text(`${r[0].padEnd(16)} | ${r[1]} Wh`, 14, y);
+      y += 6;
+    });
+
+    y += 6;
+    pdf.text("------------------------------------------", 14, y);
+    y += 8;
+    pdf.text(`Total Power: ${totalWh.toFixed(0)} Wh`, 14, y);
+    y += 6;
+    pdf.text(`Cost: ${cost} rupees`, 14, y);
   }
 
   if (selected === "month") {
-    const val = document.getElementById("singleMonth").value || new Date().toISOString().slice(0, 7);
+    const val =
+      document.getElementById("singleMonth").value ||
+      new Date().toISOString().slice(0, 7);
     const [y, m] = val.split("-");
-    const name = new Date(y, m - 1).toLocaleString("default", { month: "long" });
-    generateReport(`${name} ${y}`);
+    const name = new Date(y, m - 1).toLocaleString("default", {
+      month: "long",
+    });
+    generateMonthlyReport(`${name} ${y}`);
   } else {
     const from = new Date(document.getElementById("fromMonth").value + "-01");
     const to = new Date(document.getElementById("toMonth").value + "-01");
     let first = true;
     for (let d = new Date(from); d <= to; d.setMonth(d.getMonth() + 1)) {
       if (!first) pdf.addPage();
-      const label = `${d.toLocaleString("default", { month: "long" })} ${d.getFullYear()}`;
-      generateReport(label);
+      const label = `${d.toLocaleString("default", {
+        month: "long",
+      })} ${d.getFullYear()}`;
+      generateMonthlyReport(label);
       first = false;
     }
   }
