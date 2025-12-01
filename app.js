@@ -279,42 +279,6 @@ const LOCAL_DATA = [
 ];
 
 
-//////////////////////////////////////////////////////////////////////////////////////////-----//////////////////////////
-// ==================================================================
-//  LOCK VALUES AFTER TODAY
-// ==================================================================
-
-// Get today's date (YYYY-MM-DD) and month (YYYY-MM)
-const today = new Date();
-const todayStr = today.toISOString().slice(0, 10);   // e.g. "2025-12-01"
-const todayMonth = today.toISOString().slice(0, 7);  // e.g. "2025-12"
-
-// Lock single day input
-const singleDayInput = document.getElementById("singleDay");
-if (singleDayInput) {
-  singleDayInput.setAttribute("max", todayStr);
-}
-
-// Lock day range inputs
-const fromDayInput = document.getElementById("fromDay");
-const toDayInput = document.getElementById("toDay");
-if (fromDayInput) fromDayInput.setAttribute("max", todayStr);
-if (toDayInput) toDayInput.setAttribute("max", todayStr);
-
-// Lock single month input
-const singleMonthInput = document.getElementById("singleMonth");
-if (singleMonthInput) {
-  singleMonthInput.setAttribute("max", todayMonth);
-}
-
-// Lock month range inputs
-const fromMonthInput = document.getElementById("fromMonth");
-const toMonthInput = document.getElementById("toMonth");
-if (fromMonthInput) fromMonthInput.setAttribute("max", todayMonth);
-if (toMonthInput) toMonthInput.setAttribute("max", todayMonth);
-////////////////////////////////////////////////////////////////////////////////////////------///////////////
-
-
 // Build a quick lookup map by date for fast access
 const LOCAL_MAP = LOCAL_DATA.reduce((m, r) => {
   m[r.date] = {
