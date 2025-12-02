@@ -2,8 +2,8 @@
 //  CONFIG
 // ==================================================================
 const ESP32_HOST = "http://esp32.local"; // or "http://192.168.1.123"
-const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR_ANON_KEY";
+const SUPABASE_URL = "https://rsviyzxwvqreoarnkgwq.supabase.co";
+const SUPABASE_ANON_KEY = "YeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo";
 
 // Supabase client (vanilla fetch-based for reliability)
 async function supabaseUpsertRelay(id, state) {
