@@ -15,33 +15,39 @@ const relayStates = { 1: false, 2: false, 3: false, 4: false };
 const usageTimers = { 1: 0, 2: 0, 3: 0, 4: 0 };
 const usageLimits = { 1: 12, 2: 12, 3: 12, 4: 12 };
 const autoOffTimers = {};
-const DEVICE_ID = "esp32-local";
-
-// Supabase REST: filter by device, latest by id
-const SUPABASE_URL_CMD =
-  "https://rsviyzxwvqreoarnkgwq.supabase.co/rest/v1/commands" +
-  "?select=relay,state,device_id,created_at" +
-  "&device_id=eq.esp32-local" +
-  "&order=id.desc" +
-  "&limit=1";
-
-const SUPABASE_KEY ="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo";
 
 // ==================================================================
-//  RELAY / TIMERS / LIMITS
+//  SUPABASE CLIENT INIT
+// ==================================================================
+const { createClient } = window.supabase;
+const supabaseUrl = "https://YOUR_PROJECT.supabase.co";
+const supabaseKey = "YOUR_SUPABASE_ANON_KEY";
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// ==================================================================
+//  RELAY CONTROL
 // ==================================================================
 for (let i = 1; i <= 4; i++) {
   const el = document.getElementById(`relay${i}`);
   if (el) el.addEventListener("change", (e) => toggleRelay(i, e.target.checked));
 }
 
-function toggleRelay(id, state) {
+async function toggleRelay(id, state) {
   relayStates[id] = state;
   const statusEl = document.getElementById(`s${id}`);
   if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
   addNotification(`Load ${id} turned ${state ? "ON" : "OFF"}`);
+
+  // Push state to Supabase
+  const { error } = await supabase
+    .from("relay_control")
+    .upsert({ id, state }, { onConflict: "id" });
+  if (error) console.error("Supabase update failed:", error);
 }
 
+// ==================================================================
+//  TIMER PRESETS
+// ==================================================================
 document.querySelectorAll(".preset").forEach((btn) => {
   btn.addEventListener("click", () => {
     const input = document.getElementById("customMin");
@@ -66,6 +72,9 @@ if (applyTimerBtn2) {
   });
 }
 
+// ==================================================================
+//  USAGE LIMITS
+// ==================================================================
 const saveLimitsBtn = document.getElementById("saveLimits");
 if (saveLimitsBtn) {
   saveLimitsBtn.addEventListener("click", () => {
@@ -92,44 +101,7 @@ setInterval(() => {
       }
     }
   }
-}, 2000);
-
-// ==================================================================
-//  SUPABASE POLLING (MATCHING ESP32 LOGIC)
-// ==================================================================
-async function pollCommands() {
-  try {
-    const res = await fetch(SUPABASE_URL_CMD, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`
-      },
-      cache: "no-store"
-    });
-    if (!res.ok) {
-      console.log("Supabase GET failed:", res.status);
-      return;
-    }
-    const data = await res.json();
-    if (Array.isArray(data) && data.length > 0) {
-      const cmd = data[0];
-      if (cmd.device_id === DEVICE_ID) {
-        const relay = Number(cmd.relay);
-        const state = Boolean(cmd.state);
-        if (relay >= 1 && relay <= 4) {
-          const chk = document.getElementById(`relay${relay}`);
-          if (chk) chk.checked = state;
-          toggleRelay(relay, state);
-          console.log(`Applied command: relay ${relay} -> ${state ? "ON" : "OFF"}`);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("pollCommands error:", err);
-  }
-}
-setInterval(pollCommands, 1000);
-
+}, 2000);// =====
 
 // ==================================================================
 //  LOCAL DATASET (REPLACEMENT FOR SUPABASE)
@@ -405,8 +377,6 @@ const LOCAL_MAP = LOCAL_DATA.reduce((m, r) => {
   };
   return m;
 }, {});
-
-
 
 // ==================================================================
 //  LIVE MONITORING (unchanged demo)
