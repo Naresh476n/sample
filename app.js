@@ -2,13 +2,25 @@
 //  CONFIG
 // ==================================================================
 const ESP32_HOST = "http://esp32.local"; // or "http://192.168.1.123"
-const SUPABASE_URL = "https://rsviyzxwvqreoarnkgwq.supabase.co";
-const SUPABASE_ANON_KEY = "YeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo";
+
+// Use Vercel env vars in production
+const SUPABASE_URL =
+  typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SUPABASE_URL
+    ? process.env.NEXT_PUBLIC_SUPABASE_URL
+    : "https://rsviyzxwvqreoarnkgwq.supabase.co";
+
+const SUPABASE_ANON_KEY =
+  typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    : "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo";
+
+// Relay pin mapping (id → GPIO pin)
+const relayPins = { 1: 16, 2: 17, 3: 18, 4: 19 };
 
 // Supabase client (vanilla fetch-based for reliability)
 async function supabaseUpsertRelay(id, state) {
   // Table: relays(id int, pin int, state bool, updated_at timestamptz)
-  const body = [{ id, pin: 15 + id, state, updated_at: new Date().toISOString() }];
+  const body = [{ id, pin: relayPins[id], state, updated_at: new Date().toISOString() }];
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/relays`, {
     method: "POST",
     headers: {
@@ -56,13 +68,14 @@ async function sendToESP32(id, state) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), 2000);
   try {
-    const r = await fetch(url, { method: "GET", signal: controller.signal });
+    const r = await fetch(url, { method: "GET", signal: controller.signal, cache: "no-store" });
     clearTimeout(t);
     if (!r.ok) throw new Error(`ESP32 HTTP ${r.status}`);
     return true;
   } catch (err) {
     clearTimeout(t);
     addNotification(`ESP32 not reachable for Load ${id}. Will retry in background.`);
+    console.warn(err);
     return false;
   }
 }
@@ -80,6 +93,8 @@ async function toggleRelay(id, state) {
   relayStates[id] = state;
   const statusEl = document.getElementById(`s${id}`);
   if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
+  const chk = document.getElementById(`relay${id}`);
+  if (chk && chk.checked !== state) chk.checked = state;
   addNotification(`Load ${id} turned ${state ? "ON" : "OFF"}`);
 
   // Fire-and-forget to ESP32 for instant hardware action
@@ -167,7 +182,6 @@ setInterval(() => {
     console.warn(err);
   }
 })();
-
 // ==================================================================
 //  LOCAL DATASET (REPLACEMENT FOR SUPABASE)
 //  Use the provided readings here. Dates are YYYY-MM-DD.
