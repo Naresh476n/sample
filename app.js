@@ -16,6 +16,113 @@ const usageTimers = { 1: 0, 2: 0, 3: 0, 4: 0 };
 const usageLimits = { 1: 12, 2: 12, 3: 12, 4: 12 };
 const autoOffTimers = {};
 
+// Supabase config
+const SUPABASE_URL_CMD = "https://rsviyzxwvqreoarnkgwq.supabase.co/rest/v1/commands?select=*&order=id.desc&limit=1";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo"; 
+
+
+// ==================================================================
+//  RELAY / TIMERS / LIMITS
+// ==================================================================
+for (let i = 1; i <= 4; i++) {
+  const el = document.getElementById(`relay${i}`);
+  if (el) el.addEventListener("change", (e) => toggleRelay(i, e.target.checked));
+}
+
+function toggleRelay(id, state) {
+  relayStates[id] = state;
+  const statusEl = document.getElementById(`s${id}`);
+  if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
+  addNotification(`Load ${id} turned ${state ? "ON" : "OFF"}`);
+}
+
+document.querySelectorAll(".preset").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const input = document.getElementById("customMin");
+    if (input) input.value = btn.dataset.min;
+  });
+});
+
+const applyTimerBtn2 = document.getElementById("applyTimer");
+if (applyTimerBtn2) {
+  applyTimerBtn2.addEventListener("click", () => {
+    const load = document.getElementById("loadSelect").value;
+    const mins = parseInt(document.getElementById("customMin").value, 10);
+    if (!mins || mins <= 0) return alert("Enter valid minutes");
+    if (autoOffTimers[load]) clearTimeout(autoOffTimers[load]);
+    autoOffTimers[load] = setTimeout(() => {
+      const chk = document.getElementById(`relay${load}`);
+      if (chk) chk.checked = false;
+      toggleRelay(load, false);
+      addNotification(`Auto-OFF: Load ${load} OFF after ${mins} min`);
+    }, mins * 60 * 1000);
+    addNotification(`Timer set for Load ${load}: ${mins} min`);
+  });
+}
+
+const saveLimitsBtn = document.getElementById("saveLimits");
+if (saveLimitsBtn) {
+  saveLimitsBtn.addEventListener("click", () => {
+    for (let i = 1; i <= 4; i++) {
+      const el = document.getElementById(`limit${i}`);
+      if (!el) continue;
+      const v = parseFloat(el.value);
+      if (!isNaN(v) && v > 0) usageLimits[i] = v;
+    }
+    addNotification("Usage limits updated.");
+  });
+}
+
+setInterval(() => {
+  for (let i = 1; i <= 4; i++) {
+    if (relayStates[i]) {
+      usageTimers[i] += 2;
+      const hoursUsed = usageTimers[i] / 3600;
+      if (hoursUsed >= usageLimits[i]) {
+        const chk = document.getElementById(`relay${i}`);
+        if (chk) chk.checked = false;
+        toggleRelay(i, false);
+        addNotification(`Limit reached: Load ${i} OFF after ${usageLimits[i]} hrs`);
+      }
+    }
+  }
+}, 2000);
+
+// ==================================================================
+//  SUPABASE POLLING (MATCHING ESP32 LOGIC)
+// ==================================================================
+async function pollCommands() {
+  try {
+    const res = await fetch(SUPABASE_URL_CMD, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      }
+    });
+    if (!res.ok) {
+      console.log("Supabase GET failed:", res.status);
+      return;
+    }
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const relay = data[0].relay;
+      const state = data[0].state;
+      if (relay >= 1 && relay <= 4) {
+        const chk = document.getElementById(`relay${relay}`);
+        if (chk) chk.checked = state;
+        toggleRelay(relay, state);
+        console.log(`Applied command: relay ${relay} -> ${state ? "ON" : "OFF"}`);
+      }
+    }
+  } catch (err) {
+    console.error("pollCommands error:", err);
+  }
+}
+
+// Poll every second for instant response
+setInterval(pollCommands, 1000);
+
+
 // ==================================================================
 //  LOCAL DATASET (REPLACEMENT FOR SUPABASE)
 //  Use the provided readings here. Dates are YYYY-MM-DD.
@@ -291,67 +398,7 @@ const LOCAL_MAP = LOCAL_DATA.reduce((m, r) => {
   return m;
 }, {});
 
-// ==================================================================
-//  RELAY / TIMERS / LIMITS (unchanged behavior)
-// ==================================================================
-for (let i = 1; i <= 4; i++) {
-  const el = document.getElementById(`relay${i}`);
-  if (el) el.addEventListener("change", (e) => toggleRelay(i, e.target.checked));
-}
-function toggleRelay(id, state) {
-  relayStates[id] = state;
-  const statusEl = document.getElementById(`s${id}`);
-  if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
-  addNotification(`Load ${id} turned ${state ? "ON" : "OFF"}`);
-}
-document.querySelectorAll(".preset").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const input = document.getElementById("customMin");
-    if (input) input.value = btn.dataset.min;
-  });
-});
-const applyTimerBtn2 = document.getElementById("applyTimer");
-if (applyTimerBtn2) {
-  applyTimerBtn2.addEventListener("click", () => {
-    const load = document.getElementById("loadSelect").value;
-    const mins = parseInt(document.getElementById("customMin").value, 10);
-    if (!mins || mins <= 0) return alert("Enter valid minutes");
-    if (autoOffTimers[load]) clearTimeout(autoOffTimers[load]);
-    autoOffTimers[load] = setTimeout(() => {
-      const chk = document.getElementById(`relay${load}`);
-      if (chk) chk.checked = false;
-      toggleRelay(load, false);
-      addNotification(`Auto-OFF: Load ${load} OFF after ${mins} min`);
-    }, mins * 60 * 1000);
-    addNotification(`Timer set for Load ${load}: ${mins} min`);
-  });
-}
-const saveLimitsBtn = document.getElementById("saveLimits");
-if (saveLimitsBtn) {
-  saveLimitsBtn.addEventListener("click", () => {
-    for (let i = 1; i <= 4; i++) {
-      const el = document.getElementById(`limit${i}`);
-      if (!el) continue;
-      const v = parseFloat(el.value);
-      if (!isNaN(v) && v > 0) usageLimits[i] = v;
-    }
-    addNotification("Usage limits updated.");
-  });
-}
-setInterval(() => {
-  for (let i = 1; i <= 4; i++) {
-    if (relayStates[i]) {
-      usageTimers[i] += 2;
-      const hoursUsed = usageTimers[i] / 3600;
-      if (hoursUsed >= usageLimits[i]) {
-        const chk = document.getElementById(`relay${i}`);
-        if (chk) chk.checked = false;
-        toggleRelay(i, false);
-        addNotification(`Limit reached: Load ${i} OFF after ${usageLimits[i]} hrs`);
-      }
-    }
-  }
-}, 2000);
+
 
 // ==================================================================
 //  LIVE MONITORING (unchanged demo)
