@@ -15,11 +15,17 @@ const relayStates = { 1: false, 2: false, 3: false, 4: false };
 const usageTimers = { 1: 0, 2: 0, 3: 0, 4: 0 };
 const usageLimits = { 1: 12, 2: 12, 3: 12, 4: 12 };
 const autoOffTimers = {};
+const DEVICE_ID = "esp32-local";
 
-// Supabase config
-const SUPABASE_URL_CMD = "https://rsviyzxwvqreoarnkgwq.supabase.co/rest/v1/commands?select=*&order=id.desc&limit=1";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo"; 
+// Supabase REST: filter by device, latest by id
+const SUPABASE_URL_CMD =
+  "https://rsviyzxwvqreoarnkgwq.supabase.co/rest/v1/commands" +
+  "?select=relay,state,device_id,created_at" +
+  "&device_id=eq.esp32-local" +
+  "&order=id.desc" +
+  "&limit=1";
 
+const SUPABASE_KEY ="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo";
 
 // ==================================================================
 //  RELAY / TIMERS / LIMITS
@@ -97,29 +103,31 @@ async function pollCommands() {
       headers: {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`
-      }
+      },
+      cache: "no-store"
     });
     if (!res.ok) {
       console.log("Supabase GET failed:", res.status);
       return;
     }
     const data = await res.json();
-    if (data && data.length > 0) {
-      const relay = data[0].relay;
-      const state = data[0].state;
-      if (relay >= 1 && relay <= 4) {
-        const chk = document.getElementById(`relay${relay}`);
-        if (chk) chk.checked = state;
-        toggleRelay(relay, state);
-        console.log(`Applied command: relay ${relay} -> ${state ? "ON" : "OFF"}`);
+    if (Array.isArray(data) && data.length > 0) {
+      const cmd = data[0];
+      if (cmd.device_id === DEVICE_ID) {
+        const relay = Number(cmd.relay);
+        const state = Boolean(cmd.state);
+        if (relay >= 1 && relay <= 4) {
+          const chk = document.getElementById(`relay${relay}`);
+          if (chk) chk.checked = state;
+          toggleRelay(relay, state);
+          console.log(`Applied command: relay ${relay} -> ${state ? "ON" : "OFF"}`);
+        }
       }
     }
   } catch (err) {
     console.error("pollCommands error:", err);
   }
 }
-
-// Poll every second for instant response
 setInterval(pollCommands, 1000);
 
 
