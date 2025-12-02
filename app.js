@@ -1,4 +1,38 @@
 // ==================================================================
+//  CONFIG
+// ==================================================================
+const ESP32_HOST = "http://esp32.local"; // or "http://192.168.1.123"
+const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_KEY";
+
+// Supabase client (vanilla fetch-based for reliability)
+async function supabaseUpsertRelay(id, state) {
+  // Table: relays(id int, pin int, state bool, updated_at timestamptz)
+  const body = [{ id, pin: 15 + id, state, updated_at: new Date().toISOString() }];
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/relays`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    throw new Error(`Supabase upsert failed: ${resp.status} ${t}`);
+  }
+}
+async function supabaseFetchRelays() {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/relays?select=*`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+  });
+  if (!resp.ok) throw new Error(`Supabase fetch failed: ${resp.status}`);
+  return resp.json();
+}
+
+// ==================================================================
 //  DATE & TIME
 // ==================================================================
 function updateDateTime() {
@@ -16,26 +50,57 @@ const usageTimers = { 1: 0, 2: 0, 3: 0, 4: 0 };
 const usageLimits = { 1: 12, 2: 12, 3: 12, 4: 12 };
 const autoOffTimers = {};
 
+async function sendToESP32(id, state) {
+  // GET /relay?id=1&state=on|off for reliability in simple firmware
+  const url = `${ESP32_HOST}/relay?id=${id}&state=${state ? "on" : "off"}`;
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 2000);
+  try {
+    const r = await fetch(url, { method: "GET", signal: controller.signal });
+    clearTimeout(t);
+    if (!r.ok) throw new Error(`ESP32 HTTP ${r.status}`);
+    return true;
+  } catch (err) {
+    clearTimeout(t);
+    addNotification(`ESP32 not reachable for Load ${id}. Will retry in background.`);
+    return false;
+  }
+}
 
 // ==================================================================
-//  RELAY / TIMERS / LIMITS (unchanged behavior)
+//  RELAY / TIMERS / LIMITS
 // ==================================================================
 for (let i = 1; i <= 4; i++) {
   const el = document.getElementById(`relay${i}`);
   if (el) el.addEventListener("change", (e) => toggleRelay(i, e.target.checked));
 }
-function toggleRelay(id, state) {
+
+async function toggleRelay(id, state) {
+  // Update UI immediately
   relayStates[id] = state;
   const statusEl = document.getElementById(`s${id}`);
   if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
   addNotification(`Load ${id} turned ${state ? "ON" : "OFF"}`);
+
+  // Fire-and-forget to ESP32 for instant hardware action
+  sendToESP32(id, state);
+
+  // Persist to Supabase (await for integrity)
+  try {
+    await supabaseUpsertRelay(id, state);
+  } catch (err) {
+    addNotification(`Supabase persist failed for Load ${id}. Will retry on next change.`);
+    console.error(err);
+  }
 }
+
 document.querySelectorAll(".preset").forEach((btn) => {
   btn.addEventListener("click", () => {
     const input = document.getElementById("customMin");
     if (input) input.value = btn.dataset.min;
   });
 });
+
 const applyTimerBtn2 = document.getElementById("applyTimer");
 if (applyTimerBtn2) {
   applyTimerBtn2.addEventListener("click", () => {
@@ -46,12 +111,13 @@ if (applyTimerBtn2) {
     autoOffTimers[load] = setTimeout(() => {
       const chk = document.getElementById(`relay${load}`);
       if (chk) chk.checked = false;
-      toggleRelay(load, false);
+      toggleRelay(Number(load), false);
       addNotification(`Auto-OFF: Load ${load} OFF after ${mins} min`);
     }, mins * 60 * 1000);
     addNotification(`Timer set for Load ${load}: ${mins} min`);
   });
 }
+
 const saveLimitsBtn = document.getElementById("saveLimits");
 if (saveLimitsBtn) {
   saveLimitsBtn.addEventListener("click", () => {
@@ -64,6 +130,7 @@ if (saveLimitsBtn) {
     addNotification("Usage limits updated.");
   });
 }
+
 setInterval(() => {
   for (let i = 1; i <= 4; i++) {
     if (relayStates[i]) {
@@ -78,6 +145,29 @@ setInterval(() => {
     }
   }
 }, 2000);
+
+// ==================================================================
+//  BOOTSTRAP FROM SUPABASE (optional sync on page load)
+// ==================================================================
+(async function bootstrapFromSupabase() {
+  try {
+    const rows = await supabaseFetchRelays();
+    rows.forEach((r) => {
+      const id = Number(r.id);
+      const st = !!r.state;
+      relayStates[id] = st;
+      const chk = document.getElementById(`relay${id}`);
+      const sEl = document.getElementById(`s${id}`);
+      if (chk) chk.checked = st;
+      if (sEl) sEl.textContent = st ? "ON" : "OFF";
+    });
+    addNotification("Bootstrapped relay states from Supabase.");
+  } catch (err) {
+    addNotification("Could not bootstrap from Supabase. Using defaults.");
+    console.warn(err);
+  }
+})();
+
 // ==================================================================
 //  LOCAL DATASET (REPLACEMENT FOR SUPABASE)
 //  Use the provided readings here. Dates are YYYY-MM-DD.
