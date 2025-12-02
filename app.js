@@ -1,14 +1,5 @@
-
 // ==================================================================
-// SUPABASE SETUP
-// ==================================================================
-const SUPABASE_URL = "YOUR_SUPABASE_URL";
-const SUPABASE_ANON = "YOUR_ANON_KEY";
-
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-
-// ==================================================================
-// DATE & TIME
+//  DATE & TIME
 // ==================================================================
 function updateDateTime() {
   const el = document.getElementById("dateTime");
@@ -18,16 +9,23 @@ setInterval(updateDateTime, 1000);
 updateDateTime();
 
 // ==================================================================
-// GLOBAL VARIABLES
+//  GLOBAL VARIABLES
 // ==================================================================
 const relayStates = { 1: false, 2: false, 3: false, 4: false };
 const usageTimers = { 1: 0, 2: 0, 3: 0, 4: 0 };
 const usageLimits = { 1: 12, 2: 12, 3: 12, 4: 12 };
 const autoOffTimers = {};
 
+// ==================================================================
+//  SUPABASE CLIENT INIT
+// ==================================================================
+const { createClient } = window.supabase;
+const supabaseUrl = "https://rsviyzxwvqreoarnkgwq.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo";
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ==================================================================
-// RELAY CONTROL (Updated with Supabase)
+//  RELAY CONTROL
 // ==================================================================
 for (let i = 1; i <= 4; i++) {
   const el = document.getElementById(`relay${i}`);
@@ -36,43 +34,19 @@ for (let i = 1; i <= 4; i++) {
 
 async function toggleRelay(id, state) {
   relayStates[id] = state;
-
-  // UI Update
   const statusEl = document.getElementById(`s${id}`);
   if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
-
   addNotification(`Load ${id} turned ${state ? "ON" : "OFF"}`);
 
-  // 🔥 Update Supabase (Triggers ESP32)
-  await sb.rpc("update_relay_state", {
-    rid: id,
-    new_state: state
-  });
+  // Push state to Supabase
+  const { error } = await supabase
+    .from("relay_control")
+    .upsert({ id, state }, { onConflict: "id" });
+  if (error) console.error("Supabase update failed:", error);
 }
 
 // ==================================================================
-// REALTIME LISTENER (ESP32 → Web)
-// ==================================================================
-sb.channel("relay_updates")
-  .on("postgres_changes",
-      { event: "UPDATE", schema: "public", table: "relays" },
-      (payload) => {
-
-        const id = payload.new.id;
-        const state = payload.new.state;
-
-        const chk = document.getElementById(`relay${id}`);
-        if (chk) chk.checked = state;
-
-        const statusEl = document.getElementById(`s${id}`);
-        if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
-
-        addNotification(`ESP updated Load ${id} → ${state ? "ON" : "OFF"}`);
-      })
-  .subscribe();
-
-// ==================================================================
-// TIMERS + LIMITS (Your original logic)
+//  TIMER PRESETS
 // ==================================================================
 document.querySelectorAll(".preset").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -86,22 +60,21 @@ if (applyTimerBtn2) {
   applyTimerBtn2.addEventListener("click", () => {
     const load = document.getElementById("loadSelect").value;
     const mins = parseInt(document.getElementById("customMin").value, 10);
-
     if (!mins || mins <= 0) return alert("Enter valid minutes");
-
     if (autoOffTimers[load]) clearTimeout(autoOffTimers[load]);
-
     autoOffTimers[load] = setTimeout(() => {
       const chk = document.getElementById(`relay${load}`);
       if (chk) chk.checked = false;
       toggleRelay(load, false);
       addNotification(`Auto-OFF: Load ${load} OFF after ${mins} min`);
     }, mins * 60 * 1000);
-
     addNotification(`Timer set for Load ${load}: ${mins} min`);
   });
 }
 
+// ==================================================================
+//  USAGE LIMITS
+// ==================================================================
 const saveLimitsBtn = document.getElementById("saveLimits");
 if (saveLimitsBtn) {
   saveLimitsBtn.addEventListener("click", () => {
@@ -119,19 +92,16 @@ setInterval(() => {
   for (let i = 1; i <= 4; i++) {
     if (relayStates[i]) {
       usageTimers[i] += 2;
-
       const hoursUsed = usageTimers[i] / 3600;
-
       if (hoursUsed >= usageLimits[i]) {
         const chk = document.getElementById(`relay${i}`);
         if (chk) chk.checked = false;
-
         toggleRelay(i, false);
         addNotification(`Limit reached: Load ${i} OFF after ${usageLimits[i]} hrs`);
       }
     }
   }
-}, 2000);
+}, 2000);// =====
 
 // ==================================================================
 //  LOCAL DATASET (REPLACEMENT FOR SUPABASE)
@@ -764,5 +734,3 @@ function addNotification(msg) {
 function logout() {
   window.location.href = "index.html";
 }
-
-
