@@ -16,45 +16,26 @@ const usageTimers = { 1: 0, 2: 0, 3: 0, 4: 0 };
 const usageLimits = { 1: 12, 2: 12, 3: 12, 4: 12 };
 const autoOffTimers = {};
 
-// ==================================================================
-//  SUPABASE CLIENT INIT
-// ==================================================================
-const { createClient } = window.supabase;
-const supabaseUrl = "https://rsviyzxwvqreoarnkgwq.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo";
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ==================================================================
-//  RELAY CONTROL
+//  RELAY / TIMERS / LIMITS (unchanged behavior)
 // ==================================================================
 for (let i = 1; i <= 4; i++) {
   const el = document.getElementById(`relay${i}`);
   if (el) el.addEventListener("change", (e) => toggleRelay(i, e.target.checked));
 }
-
-async function toggleRelay(id, state) {
+function toggleRelay(id, state) {
   relayStates[id] = state;
   const statusEl = document.getElementById(`s${id}`);
   if (statusEl) statusEl.textContent = state ? "ON" : "OFF";
   addNotification(`Load ${id} turned ${state ? "ON" : "OFF"}`);
-
-  // Push state to Supabase
-  const { error } = await supabase
-    .from("relay_control")
-    .upsert({ id, state }, { onConflict: "id" });
-  if (error) console.error("Supabase update failed:", error);
 }
-
-// ==================================================================
-//  TIMER PRESETS
-// ==================================================================
 document.querySelectorAll(".preset").forEach((btn) => {
   btn.addEventListener("click", () => {
     const input = document.getElementById("customMin");
     if (input) input.value = btn.dataset.min;
   });
 });
-
 const applyTimerBtn2 = document.getElementById("applyTimer");
 if (applyTimerBtn2) {
   applyTimerBtn2.addEventListener("click", () => {
@@ -71,10 +52,6 @@ if (applyTimerBtn2) {
     addNotification(`Timer set for Load ${load}: ${mins} min`);
   });
 }
-
-// ==================================================================
-//  USAGE LIMITS
-// ==================================================================
 const saveLimitsBtn = document.getElementById("saveLimits");
 if (saveLimitsBtn) {
   saveLimitsBtn.addEventListener("click", () => {
@@ -87,7 +64,6 @@ if (saveLimitsBtn) {
     addNotification("Usage limits updated.");
   });
 }
-
 setInterval(() => {
   for (let i = 1; i <= 4; i++) {
     if (relayStates[i]) {
@@ -101,8 +77,7 @@ setInterval(() => {
       }
     }
   }
-}, 2000);// =====
-
+}, 2000);
 // ==================================================================
 //  LOCAL DATASET (REPLACEMENT FOR SUPABASE)
 //  Use the provided readings here. Dates are YYYY-MM-DD.
