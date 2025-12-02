@@ -20,8 +20,8 @@ const autoOffTimers = {};
 //  SUPABASE CLIENT INIT
 // ==================================================================
 const { createClient } = window.supabase;
-const supabaseUrl = "https://YOUR_PROJECT.supabase.co";
-const supabaseKey = "YOUR_SUPABASE_ANON_KEY";
+const supabaseUrl = "https://rsviyzxwvqreoarnkgwq.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdml5enh3dnFyZW9hcm5rZ3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MDU0NDUsImV4cCI6MjA4MDE4MTQ0NX0.aa33iLf4wmbjgLdxS6_9oUNHYj_31nG-I2Tmwb-3_eo";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ==================================================================
