@@ -507,9 +507,11 @@ const filterInputs = {
 };
 if (filterSelect) {
   filterSelect.addEventListener("change", () => {
-    Object.values(filterInputs).forEach((el) => el && el.classList.add("hidden"));
+    Object.values(filterInputs).forEach((el) => {
+      if (el && el.classList) el.classList.add("hidden");
+    });
     const selected = filterSelect.value;
-    if (filterInputs[selected]) filterInputs[selected].classList.remove("hidden");
+    if (filterInputs[selected] && filterInputs[selected].classList) filterInputs[selected].classList.remove("hidden");
   });
 }
 
@@ -794,13 +796,6 @@ if (downloadPdfBtn) {
 // ==================================================================
 //  NOTIFICATIONS + LOGOUT
 // ==================================================================
-const refreshNotifs = document.getElementById("refreshNotifs");
-if (refreshNotifs) refreshNotifs.addEventListener("click", () => addNotification("New data updated."));
-const clearNotifs = document.getElementById("clearNotifs");
-if (clearNotifs) clearNotifs.addEventListener("click", () => {
-  const notifs = document.getElementById("notifs");
-  if (notifs) notifs.innerHTML = "<li>No notifications yet.</li>";
-});
 function addNotification(msg) {
   const list = document.getElementById("notifs");
   if (!list) return;
@@ -809,6 +804,14 @@ function addNotification(msg) {
   li.textContent = `${new Date().toLocaleTimeString()} - ${msg}`;
   list.prepend(li);
 }
+
+const refreshNotifs = document.getElementById("refreshNotifs");
+if (refreshNotifs) refreshNotifs.addEventListener("click", () => addNotification("New data updated."));
+const clearNotifs = document.getElementById("clearNotifs");
+if (clearNotifs) clearNotifs.addEventListener("click", () => {
+  const notifs = document.getElementById("notifs");
+  if (notifs) notifs.innerHTML = "<li>No notifications yet.</li>";
+});
 function logout() {
   window.location.href = "index.html";
 }
