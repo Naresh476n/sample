@@ -177,7 +177,9 @@ setInterval(() => {
       if (sEl) sEl.textContent = st ? "ON" : "OFF";
     });
     addNotification("Bootstrapped relay states from Supabase.");
-  } 
+  } catch (err) {
+    console.warn("Bootstrap from Supabase failed:", err);
+  }
 })();
 // ==================================================================
 //  LOCAL DATASET (REPLACEMENT FOR SUPABASE)
